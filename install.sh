@@ -1,6 +1,6 @@
 #!/bin/bash
 # dev-sync-tool installer
-# Installs: Dev-Sync (file sync) + Statusline + gentle-ai (Engram + SDD)
+# Installs: Tete Output Style + Dev-Sync (file sync) + Statusline + gentle-ai (Engram + SDD)
 # Usage: bash install.sh
 
 set -euo pipefail
@@ -28,10 +28,11 @@ step()  { echo -e "\n${BOLD}${CYAN}═══ $1 ═══${NC}\n"; }
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}║          Dev-Sync Tool Installer             ║${NC}"
-echo -e "${BOLD}║   File Sync + Statusline + Engram + SDD      ║${NC}"
+echo -e "${BOLD}║  Tete Style + Sync + Statusline + Engram     ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${DIM}  Components:${NC}"
+echo -e "  ${GREEN}●${NC} Tete Style  — Andaluz cordobes output style for Claude Code"
 echo -e "  ${GREEN}●${NC} Dev-Sync    — Google Drive for your code"
 echo -e "  ${GREEN}●${NC} Statusline  — Custom Claude Code status bar"
 echo -e "  ${GREEN}●${NC} Engram      — Persistent AI memory across sessions"
@@ -41,7 +42,7 @@ echo ""
 # ===================================================================
 # STEP 1: Dependencies
 # ===================================================================
-step "1/6 — Dependencies"
+step "1/7 — Dependencies"
 
 MISSING=""
 for cmd in git jq rsync; do
@@ -65,7 +66,7 @@ ok "Core dependencies ready (git, jq, rsync)"
 # ===================================================================
 # STEP 2: Dev-Sync scripts
 # ===================================================================
-step "2/6 — Dev-Sync Scripts"
+step "2/7 — Dev-Sync Scripts"
 
 mkdir -p "$SCRIPTS_DIR"
 
@@ -89,9 +90,33 @@ chmod +x "$SCRIPTS_DIR"/dev-sync*.sh
 ok "Sync scripts installed to $SCRIPTS_DIR"
 
 # ===================================================================
-# STEP 3: Statusline
+# STEP 3: Output Style (Tete)
 # ===================================================================
-step "3/6 — Statusline"
+step "3/7 — Output Style (Tete)"
+
+STYLES_DIR="$HOME/.claude/output-styles"
+mkdir -p "$STYLES_DIR"
+
+STYLE_SOURCE=""
+if [[ -f "$INSTALLER_DIR/output-styles/tete.md" ]]; then
+  STYLE_SOURCE="$INSTALLER_DIR/output-styles/tete.md"
+elif [[ -f "./output-styles/tete.md" ]]; then
+  STYLE_SOURCE="./output-styles/tete.md"
+fi
+
+if [[ -n "$STYLE_SOURCE" ]]; then
+  cp "$STYLE_SOURCE" "$STYLES_DIR/tete.md"
+  ok "Output style 'Tete' installed (andaluz cordobes puro)"
+else
+  STYLE_URL="https://raw.githubusercontent.com/tete-cordobes/dev-sync-tool/main/output-styles/tete.md"
+  curl -fsSL "$STYLE_URL" -o "$STYLES_DIR/tete.md"
+  ok "Output style 'Tete' downloaded and installed"
+fi
+
+# ===================================================================
+# STEP 4: Statusline
+# ===================================================================
+step "4/7 — Statusline"
 
 STATUSLINE_SOURCE=""
 if [[ -f "$INSTALLER_DIR/statusline.sh" ]]; then
@@ -112,9 +137,9 @@ else
 fi
 
 # ===================================================================
-# STEP 4: Claude Code hooks + settings
+# STEP 5: Claude Code hooks + settings
 # ===================================================================
-step "4/6 — Claude Code Configuration"
+step "5/7 — Claude Code Configuration"
 
 mkdir -p "$HOME/.claude"
 
@@ -122,6 +147,7 @@ mkdir -p "$HOME/.claude"
 if [[ ! -f "$SETTINGS_FILE" ]]; then
   cat > "$SETTINGS_FILE" << 'SETTINGS'
 {
+  "outputStyle": "Tete",
   "hooks": {
     "PostToolUse": [
       {
@@ -154,7 +180,7 @@ if [[ ! -f "$SETTINGS_FILE" ]]; then
   }
 }
 SETTINGS
-  ok "Created settings.json with hooks + statusline"
+  ok "Created settings.json with hooks + statusline + Tete output style"
 else
   # Add hooks if not present
   if jq -e '.hooks.PostToolUse' "$SETTINGS_FILE" &>/dev/null; then
@@ -189,12 +215,23 @@ else
   else
     ok "Statusline already configured in settings.json"
   fi
+
+  # Add outputStyle if not present (NEVER overwrite existing choice)
+  if ! jq -e '.outputStyle' "$SETTINGS_FILE" &>/dev/null; then
+    TEMP_FILE=$(mktemp)
+    jq '. + {"outputStyle": "Tete"}' "$SETTINGS_FILE" > "$TEMP_FILE"
+    mv "$TEMP_FILE" "$SETTINGS_FILE"
+    ok "Set output style to 'Tete' (andaluz cordobes)"
+  else
+    CURRENT_STYLE=$(jq -r '.outputStyle' "$SETTINGS_FILE")
+    ok "Output style already set to '$CURRENT_STYLE' (not modified)"
+  fi
 fi
 
 # ===================================================================
 # STEP 5: Sync repo setup
 # ===================================================================
-step "5/6 — Sync Repo"
+step "6/7 — Sync Repo"
 
 if [[ -d "$SYNC_REPO/.git" ]]; then
   ok "Sync repo already exists at $SYNC_REPO"
@@ -298,7 +335,7 @@ fi
 # ===================================================================
 # STEP 6: gentle-ai (Engram + SDD)
 # ===================================================================
-step "6/6 — Engram + SDD (via gentle-ai)"
+step "7/7 — Engram + SDD (via gentle-ai)"
 
 if command -v gentle-ai &>/dev/null; then
   ok "gentle-ai already installed: $(gentle-ai version 2>/dev/null || echo 'unknown version')"
@@ -407,6 +444,7 @@ echo -e "${BOLD}╔════════════════════�
 echo -e "${BOLD}║          Installation Complete!              ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════╝${NC}"
 echo ""
+echo -e "  ${GREEN}✓${NC} Tete Style   Andaluz cordobes output style"
 echo -e "  ${GREEN}✓${NC} Dev-Sync     ~/dev-sync/ + Claude Code hooks"
 echo -e "  ${GREEN}✓${NC} Statusline   ~/.claude/statusline.sh (with sync indicator)"
 
