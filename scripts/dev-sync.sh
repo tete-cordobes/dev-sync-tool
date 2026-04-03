@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SYNC_REPO="$HOME/dev-sync"
-LOCK_FILE="/tmp/dev-sync.lock"
+LOCK_DIR="/tmp/dev-sync.lock"
 LOG_FILE="/tmp/dev-sync.log"
 
 # Read hook input from stdin
@@ -64,15 +64,19 @@ fi
 
 # Auto-commit and push in background (non-blocking)
 (
-  # Simple lock to avoid concurrent git operations
-  if [[ -f "$LOCK_FILE" ]]; then
-    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+  # Atomic lock using mkdir (no race condition)
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    # Lock exists — check if the holder is still alive
+    LOCK_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
     if [[ -n "$LOCK_PID" ]] && kill -0 "$LOCK_PID" 2>/dev/null; then
       exit 0
     fi
+    # Stale lock — reclaim it
+    rm -rf "$LOCK_DIR"
+    mkdir "$LOCK_DIR" 2>/dev/null || exit 0
   fi
-  echo $$ > "$LOCK_FILE"
-  trap 'rm -f "$LOCK_FILE"' EXIT
+  echo $$ > "$LOCK_DIR/pid"
+  trap 'rm -rf "$LOCK_DIR"' EXIT
 
   cd "$SYNC_REPO"
 

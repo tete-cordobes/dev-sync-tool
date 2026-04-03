@@ -59,13 +59,17 @@ else
   TOK_PER_SEC=0
 fi
 
-# Format token counts (k/M)
+# Format token counts (k/M) — pure bash, no bc dependency
 format_tokens() {
   local n=$1
   if [ "$n" -ge 1000000 ]; then
-    printf '%.1fM' "$(echo "scale=1; $n / 1000000" | bc)"
+    local whole=$((n / 1000000))
+    local frac=$(( (n % 1000000) / 100000 ))
+    echo "${whole}.${frac}M"
   elif [ "$n" -ge 1000 ]; then
-    printf '%.1fk' "$(echo "scale=1; $n / 1000" | bc)"
+    local whole=$((n / 1000))
+    local frac=$(( (n % 1000) / 100 ))
+    echo "${whole}.${frac}k"
   else
     echo "$n"
   fi
@@ -94,14 +98,19 @@ GIT_CACHE_TTL=5
 REMOTE_CACHE="/tmp/claude_statusline_remote"
 REMOTE_CACHE_TTL=60
 
+# Cross-platform stat: returns file mtime as epoch seconds (macOS + Linux)
+file_mtime() {
+  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
+}
+
 git_cache_stale() {
   [ ! -f "$GIT_CACHE" ] || \
-  [ $(($(date +%s) - $(stat -f %m "$GIT_CACHE" 2>/dev/null || echo 0))) -gt $GIT_CACHE_TTL ]
+  [ $(($(date +%s) - $(file_mtime "$GIT_CACHE"))) -gt $GIT_CACHE_TTL ]
 }
 
 remote_cache_stale() {
   [ ! -f "$REMOTE_CACHE" ] || \
-  [ $(($(date +%s) - $(stat -f %m "$REMOTE_CACHE" 2>/dev/null || echo 0))) -gt $REMOTE_CACHE_TTL ]
+  [ $(($(date +%s) - $(file_mtime "$REMOTE_CACHE"))) -gt $REMOTE_CACHE_TTL ]
 }
 
 if git_cache_stale; then
@@ -228,12 +237,12 @@ LINE1+="${SUCCESS}+${ADDED}${NC} ${ERROR}-${REMOVED}${NC}"
 # Dev-Sync status
 SYNC_STATUS=""
 SYNC_LOG="/tmp/dev-sync.log"
-SYNC_LOCK="/tmp/dev-sync.lock"
+SYNC_LOCK_DIR="/tmp/dev-sync.lock"
 if [ -f "$SYNC_LOG" ]; then
-  SYNC_LAST_MOD=$(stat -f %m "$SYNC_LOG" 2>/dev/null || echo 0)
+  SYNC_LAST_MOD=$(file_mtime "$SYNC_LOG")
   SYNC_NOW=$(date +%s)
   SYNC_AGO=$((SYNC_NOW - SYNC_LAST_MOD))
-  if [ -f "$SYNC_LOCK" ] && kill -0 "$(cat "$SYNC_LOCK" 2>/dev/null)" 2>/dev/null; then
+  if [ -d "$SYNC_LOCK_DIR" ] && kill -0 "$(cat "$SYNC_LOCK_DIR/pid" 2>/dev/null)" 2>/dev/null; then
     SYNC_STATUS="${CYAN}⟳ syncing${NC}"
   elif [ "$SYNC_AGO" -lt 60 ]; then
     SYNC_STATUS="${SUCCESS}✓ sync ${SYNC_AGO}s${NC}"

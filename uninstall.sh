@@ -48,19 +48,22 @@ if [[ -f "$SETTINGS" ]] && command -v jq &>/dev/null; then
   echo -e "${GREEN}[OK]${NC} Hooks removed from settings.json"
 fi
 
-# Remove shell aliases
+# Remove shell aliases (cross-platform sed -i)
 for rc in "$HOME/.zshrc" "$HOME/.bashrc"; do
   if [[ -f "$rc" ]]; then
-    sed -i.bak '/dev-sync-restore/d' "$rc"
-    sed -i.bak '/dev-sync-log/d' "$rc"
-    sed -i.bak '/Dev-Sync/d' "$rc"
-    rm -f "${rc}.bak"
+    if sed --version &>/dev/null 2>&1; then
+      # GNU sed (Linux)
+      sed -i '/dev-sync-restore/d; /dev-sync-log/d; /dev-sync-status/d; /Dev-Sync/d' "$rc"
+    else
+      # BSD sed (macOS)
+      sed -i '' '/dev-sync-restore/d; /dev-sync-log/d; /dev-sync-status/d; /Dev-Sync/d' "$rc"
+    fi
   fi
 done
 echo -e "${GREEN}[OK]${NC} Shell aliases removed"
 
 # Cleanup temp files
-rm -f /tmp/dev-sync.lock /tmp/dev-sync.log /tmp/dev-sync-last-pull
+rm -rf /tmp/dev-sync.lock /tmp/dev-sync.log /tmp/dev-sync-last-pull
 
 echo ""
 echo -e "${GREEN}Done!${NC} Dev-sync removed."

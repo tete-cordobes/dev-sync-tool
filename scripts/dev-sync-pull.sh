@@ -30,6 +30,10 @@ fi
 
   # If we're in a project that exists in sync, restore changed files
   CWD="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+  # Bail if CWD is root or empty (background process without valid pwd)
+  if [[ -z "$CWD" || "$CWD" == "/" ]]; then
+    exit 0
+  fi
   if [[ -d "$CWD/.git" ]]; then
     PROJECT_NAME=$(basename "$(cd "$CWD" && git rev-parse --show-toplevel 2>/dev/null || echo "$CWD")")
     SYNC_PROJECT="$SYNC_REPO/$PROJECT_NAME"

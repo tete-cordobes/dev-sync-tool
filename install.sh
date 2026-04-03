@@ -430,7 +430,7 @@ if [[ -n "$SHELL_RC" ]]; then
 # Dev-Sync aliases
 alias dev-sync-restore='bash $HOME/.claude/scripts/dev-sync-restore.sh'
 alias dev-sync-log='tail -20 /tmp/dev-sync.log'
-alias dev-sync-status='echo "Last sync:" && stat -f "%Sm" /tmp/dev-sync.log 2>/dev/null || echo "No syncs yet"'
+alias dev-sync-status='echo "Last sync:" && (stat -f "%Sm" /tmp/dev-sync.log 2>/dev/null || stat -c "%y" /tmp/dev-sync.log 2>/dev/null || echo "No syncs yet")'
 ALIASES
     ok "Shell aliases added (dev-sync-restore, dev-sync-log, dev-sync-status)"
   fi
