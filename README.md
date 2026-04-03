@@ -1,8 +1,17 @@
-# Dev-Sync
+# Dev-Sync Tool
 
-**Google Drive for your code.** Auto-syncs everything you do in Claude Code to a central GitHub repo so you can seamlessly continue on another machine.
+**Google Drive for your code + AI memory.** Everything you need to work seamlessly across multiple machines with Claude Code.
 
-## What it does
+## What's included
+
+| Component | What it does |
+|-----------|-------------|
+| **Dev-Sync** | Auto-mirrors code files to a central repo (like Google Drive) |
+| **Statusline** | Custom Claude Code status bar with sync indicator |
+| **Engram** | Persistent AI memory across sessions (via [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai)) |
+| **SDD** | Spec-Driven Development workflow for complex features |
+
+## How it works
 
 ```
 MACHINE A                              MACHINE B
@@ -10,92 +19,80 @@ MACHINE A                              MACHINE B
 Work with Claude Code                  
   ↓ (silent hook)                      
 ~/dev-sync/ ← auto-commit + push      
+  + Engram saves AI memory             
                                        Open Claude Code
                                          ↓ (SessionStart hook)
                                        ~/dev-sync/ ← auto-pull + restore
+                                         + Engram loads AI memory
                                        Continue working seamlessly
 ```
 
-- **Every file edit** is silently mirrored to `~/dev-sync/<project>/`
-- **Auto-commits and pushes** in the background (non-blocking)
-- **Auto-pulls on startup** when you open Claude Code on another machine
-- **Your real commits** go to your actual project repo — dev-sync is just a transparent draft layer
+Your **real commits** go to your actual project repo when YOU say so. Dev-sync is a transparent draft layer.
 
 ## Install
 
 ```bash
-# Clone and run
 git clone https://github.com/tete-cordobes/dev-sync-tool.git /tmp/dev-sync-tool
 bash /tmp/dev-sync-tool/install.sh
 ```
 
-Or if you already have it locally:
+The installer will:
+1. Install sync scripts + Claude Code hooks
+2. Install custom statusline with sync indicator
+3. Create `~/dev-sync/` mirror repo (+ optional GitHub private repo)
+4. Install gentle-ai (Engram + SDD + Skills)
 
-```bash
-cd dev-sync-tool
-bash install.sh
+## Statusline
+
+Custom two-line status bar for Claude Code:
+
+```
+🎭 Opus 4.6 (1M context) Tete I ⟡project 📁dir  branch*  +28 -28
+ctx ████ 26% $9.44 ↓76 ↑13.8k 32t/s 5h 7%→2h48m 7d 12%  ✓ sync 2m
 ```
 
-The installer will:
-1. Install sync scripts to `~/.claude/scripts/`
-2. Add hooks to `~/.claude/settings.json`
-3. Create the `~/dev-sync/` mirror repo
-4. Optionally create a private GitHub repo via `gh`
+### Sync indicator (rightmost element, line 2)
 
-## How it works
+| Status | Meaning |
+|--------|---------|
+| `✓ sync 30s` (green) | Synced less than 1 minute ago |
+| `✓ sync 5m` (green) | Synced minutes ago |
+| `⚠ sync 2h` (yellow) | Last sync was hours ago |
+| `✗ sync 1d` (red) | Last sync was days ago |
+| `⟳ syncing` (cyan) | Sync in progress |
 
-### Claude Code Hooks
+## Claude Code Hooks
 
 | Hook | Trigger | Action |
 |------|---------|--------|
-| `PostToolUse` | After every `Edit` / `Write` | Copies file to sync repo, commits, pushes |
-| `SessionStart` | When Claude Code starts | Pulls latest from sync repo, restores to project |
+| `PostToolUse` | After every `Edit` / `Write` | Copies file → sync repo → commit → push |
+| `SessionStart` | When Claude Code opens | Pulls sync repo → restores files to project |
 
-### Sync repo structure
+## Sync repo structure
 
 ```
 ~/dev-sync/
 ├── .gitignore          # Excludes node_modules, build, secrets, etc.
-├── project-alpha/      # Mirror of ~/projects/project-alpha
-├── project-beta/       # Mirror of ~/projects/project-beta
+├── project-alpha/      # Mirror of project-alpha
+├── project-beta/       # Mirror of project-beta
 └── ...
 ```
 
-### What gets synced
+## Safety
 
-| Synced | Not synced |
-|--------|------------|
-| Source code files | `node_modules/`, `vendor/`, `.venv/` |
-| Config files | Build outputs (`dist/`, `build/`, `.next/`) |
-| Project `.gitignore` | Secrets (`.env`, `*.pem`, `*.key`) |
-| | Large binaries (`.zip`, `.dmg`, `.mp4`) |
-
-### Safety
-
-- **Secrets are excluded** — `.env`, credentials, keys are never synced
-- **Non-blocking** — sync runs in the background, never slows down your work
+- **Secrets excluded** — `.env`, credentials, keys are never synced
+- **Non-blocking** — sync runs in background
 - **Lock mechanism** — prevents concurrent git operations
 - **Loop prevention** — edits inside `~/dev-sync/` are ignored
-- **Batching** — 2-second delay batches rapid consecutive edits
+- **Batching** — 2-second delay batches rapid edits
 
 ## Commands
 
 ```bash
-# Manually restore a project on the other machine
-dev-sync-restore my-project ~/projects/my-project
-
-# View sync activity
-dev-sync-log
+dev-sync-restore <project> [target]   # Restore project from sync
+dev-sync-log                          # View sync activity
+dev-sync-status                       # Last sync time
 ```
-
-## Complementary tools
-
-Dev-sync handles **file synchronization**. For **AI memory synchronization** (so Claude remembers what it learned about your project across machines), check out [Engram](https://github.com/Gentleman-Programming/engram).
-
-| Tool | Syncs | Purpose |
-|------|-------|---------|
-| **Dev-Sync** | Code files | Same code on both machines |
-| **Engram** | Agent memory | Claude knows what it did on the other machine |
 
 ## Uninstall
 
@@ -103,7 +100,7 @@ Dev-sync handles **file synchronization**. For **AI memory synchronization** (so
 bash uninstall.sh
 ```
 
-Removes scripts, hooks, and aliases. Your `~/dev-sync/` data is preserved.
+Removes scripts, hooks, aliases. Your `~/dev-sync/` data is preserved.
 
 ## Requirements
 

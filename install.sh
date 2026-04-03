@@ -1,6 +1,7 @@
 #!/bin/bash
-# dev-sync installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/USERNAME/dev-sync/main/install.sh | bash
+# dev-sync-tool installer
+# Installs: Dev-Sync (file sync) + Statusline + gentle-ai (Engram + SDD)
+# Usage: bash install.sh
 
 set -euo pipefail
 
@@ -8,29 +9,39 @@ BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 BOLD='\033[1m'
+DIM='\033[2m'
 
 SYNC_REPO="$HOME/dev-sync"
 SCRIPTS_DIR="$HOME/.claude/scripts"
 SETTINGS_FILE="$HOME/.claude/settings.json"
+INSTALLER_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 info()  { echo -e "${BLUE}[*]${NC} $1"; }
 ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
+step()  { echo -e "\n${BOLD}${CYAN}═══ $1 ═══${NC}\n"; }
 
 echo ""
-echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║         Dev-Sync Installer           ║${NC}"
-echo -e "${BOLD}║   Google Drive for your code + AI    ║${NC}"
-echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
+echo -e "${BOLD}╔══════════════════════════════════════════════╗${NC}"
+echo -e "${BOLD}║          Dev-Sync Tool Installer             ║${NC}"
+echo -e "${BOLD}║   File Sync + Statusline + Engram + SDD      ║${NC}"
+echo -e "${BOLD}╚══════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${DIM}  Components:${NC}"
+echo -e "  ${GREEN}●${NC} Dev-Sync    — Google Drive for your code"
+echo -e "  ${GREEN}●${NC} Statusline  — Custom Claude Code status bar"
+echo -e "  ${GREEN}●${NC} Engram      — Persistent AI memory across sessions"
+echo -e "  ${GREEN}●${NC} SDD         — Spec-Driven Development workflow"
 echo ""
 
-# -------------------------------------------------------------------
-# Step 1: Check dependencies
-# -------------------------------------------------------------------
-info "Checking dependencies..."
+# ===================================================================
+# STEP 1: Dependencies
+# ===================================================================
+step "1/6 — Dependencies"
 
 MISSING=""
 for cmd in git jq rsync; do
@@ -40,7 +51,7 @@ for cmd in git jq rsync; do
 done
 
 if [[ -n "$MISSING" ]]; then
-  warn "Missing dependencies:$MISSING"
+  warn "Missing:$MISSING"
   if command -v brew &>/dev/null; then
     info "Installing via Homebrew..."
     brew install $MISSING
@@ -49,19 +60,18 @@ if [[ -n "$MISSING" ]]; then
     exit 1
   fi
 fi
-ok "Dependencies ready"
+ok "Core dependencies ready (git, jq, rsync)"
 
-# -------------------------------------------------------------------
-# Step 2: Install scripts
-# -------------------------------------------------------------------
-info "Installing scripts to $SCRIPTS_DIR..."
+# ===================================================================
+# STEP 2: Dev-Sync scripts
+# ===================================================================
+step "2/6 — Dev-Sync Scripts"
 
 mkdir -p "$SCRIPTS_DIR"
 
-# Download or copy scripts
 SCRIPT_SOURCE=""
-if [[ -d "$(dirname "$0")/scripts" ]]; then
-  SCRIPT_SOURCE="$(dirname "$0")/scripts"
+if [[ -d "$INSTALLER_DIR/scripts" ]]; then
+  SCRIPT_SOURCE="$INSTALLER_DIR/scripts"
 elif [[ -d "./scripts" ]]; then
   SCRIPT_SOURCE="./scripts"
 fi
@@ -69,7 +79,6 @@ fi
 if [[ -n "$SCRIPT_SOURCE" ]]; then
   cp "$SCRIPT_SOURCE"/dev-sync*.sh "$SCRIPTS_DIR/"
 else
-  # Download from GitHub
   REPO_URL="https://raw.githubusercontent.com/tete-cordobes/dev-sync-tool/main/scripts"
   for script in dev-sync.sh dev-sync-pull.sh dev-sync-restore.sh; do
     curl -fsSL "$REPO_URL/$script" -o "$SCRIPTS_DIR/$script"
@@ -77,17 +86,40 @@ else
 fi
 
 chmod +x "$SCRIPTS_DIR"/dev-sync*.sh
-ok "Scripts installed"
+ok "Sync scripts installed to $SCRIPTS_DIR"
 
-# -------------------------------------------------------------------
-# Step 3: Configure Claude Code hooks
-# -------------------------------------------------------------------
-info "Configuring Claude Code hooks..."
+# ===================================================================
+# STEP 3: Statusline
+# ===================================================================
+step "3/6 — Statusline"
+
+STATUSLINE_SOURCE=""
+if [[ -f "$INSTALLER_DIR/statusline.sh" ]]; then
+  STATUSLINE_SOURCE="$INSTALLER_DIR/statusline.sh"
+elif [[ -f "./statusline.sh" ]]; then
+  STATUSLINE_SOURCE="./statusline.sh"
+fi
+
+if [[ -n "$STATUSLINE_SOURCE" ]]; then
+  cp "$STATUSLINE_SOURCE" "$HOME/.claude/statusline.sh"
+  chmod +x "$HOME/.claude/statusline.sh"
+  ok "Statusline installed (with sync indicator)"
+else
+  STATUSLINE_URL="https://raw.githubusercontent.com/tete-cordobes/dev-sync-tool/main/statusline.sh"
+  curl -fsSL "$STATUSLINE_URL" -o "$HOME/.claude/statusline.sh"
+  chmod +x "$HOME/.claude/statusline.sh"
+  ok "Statusline downloaded and installed"
+fi
+
+# ===================================================================
+# STEP 4: Claude Code hooks + settings
+# ===================================================================
+step "4/6 — Claude Code Configuration"
 
 mkdir -p "$HOME/.claude"
 
+# -- Hooks --
 if [[ ! -f "$SETTINGS_FILE" ]]; then
-  # Create fresh settings with hooks
   cat > "$SETTINGS_FILE" << 'SETTINGS'
 {
   "hooks": {
@@ -114,47 +146,63 @@ if [[ ! -f "$SETTINGS_FILE" ]]; then
         ]
       }
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh",
+    "padding": 0
   }
 }
 SETTINGS
-  ok "Created settings.json with hooks"
+  ok "Created settings.json with hooks + statusline"
 else
-  # Check if hooks already exist
+  # Add hooks if not present
   if jq -e '.hooks.PostToolUse' "$SETTINGS_FILE" &>/dev/null; then
-    # Check if our hook is already there
     if jq -e '.hooks.PostToolUse[] | select(.hooks[]?.command | contains("dev-sync"))' "$SETTINGS_FILE" &>/dev/null; then
       ok "Dev-sync hooks already configured"
     else
-      # Append our hooks to existing ones
       TEMP_FILE=$(mktemp)
       jq '.hooks.PostToolUse += [{"matcher": "Edit|Write", "hooks": [{"type": "command", "command": "bash \"$HOME/.claude/scripts/dev-sync.sh\"", "timeout": 10}]}]' "$SETTINGS_FILE" > "$TEMP_FILE"
       mv "$TEMP_FILE" "$SETTINGS_FILE"
-      ok "Added dev-sync to existing PostToolUse hooks"
+      ok "Added dev-sync PostToolUse hook"
     fi
   else
-    # Add hooks key
     TEMP_FILE=$(mktemp)
     jq '. + {"hooks": {"PostToolUse": [{"matcher": "Edit|Write", "hooks": [{"type": "command", "command": "bash \"$HOME/.claude/scripts/dev-sync.sh\"", "timeout": 10}]}], "SessionStart": [{"hooks": [{"type": "command", "command": "bash \"$HOME/.claude/scripts/dev-sync-pull.sh\"", "timeout": 15}]}]}}' "$SETTINGS_FILE" > "$TEMP_FILE"
     mv "$TEMP_FILE" "$SETTINGS_FILE"
     ok "Added hooks to settings.json"
   fi
 
-  # Add SessionStart if missing
   if ! jq -e '.hooks.SessionStart' "$SETTINGS_FILE" &>/dev/null; then
     TEMP_FILE=$(mktemp)
     jq '.hooks.SessionStart = [{"hooks": [{"type": "command", "command": "bash \"$HOME/.claude/scripts/dev-sync-pull.sh\"", "timeout": 15}]}]' "$SETTINGS_FILE" > "$TEMP_FILE"
     mv "$TEMP_FILE" "$SETTINGS_FILE"
     ok "Added SessionStart hook"
   fi
+
+  # Add statusline config if not present
+  if ! jq -e '.statusLine' "$SETTINGS_FILE" &>/dev/null; then
+    TEMP_FILE=$(mktemp)
+    jq '. + {"statusLine": {"type": "command", "command": "~/.claude/statusline.sh", "padding": 0}}' "$SETTINGS_FILE" > "$TEMP_FILE"
+    mv "$TEMP_FILE" "$SETTINGS_FILE"
+    ok "Added statusline to settings.json"
+  else
+    ok "Statusline already configured in settings.json"
+  fi
 fi
 
-# -------------------------------------------------------------------
-# Step 4: Setup sync repo
-# -------------------------------------------------------------------
-info "Setting up sync repo at $SYNC_REPO..."
+# ===================================================================
+# STEP 5: Sync repo setup
+# ===================================================================
+step "5/6 — Sync Repo"
 
 if [[ -d "$SYNC_REPO/.git" ]]; then
-  ok "Sync repo already exists"
+  ok "Sync repo already exists at $SYNC_REPO"
+  cd "$SYNC_REPO"
+  if git remote get-url origin &>/dev/null; then
+    info "Pulling latest..."
+    git pull --rebase 2>/dev/null || git pull 2>/dev/null || true
+  fi
 else
   mkdir -p "$SYNC_REPO"
   cd "$SYNC_REPO"
@@ -228,50 +276,109 @@ GITIGNORE
 
   git add -A
   git commit -m "init: dev-sync workspace"
-  ok "Sync repo created"
-fi
+  ok "Sync repo created at $SYNC_REPO"
 
-# -------------------------------------------------------------------
-# Step 5: Connect to GitHub remote
-# -------------------------------------------------------------------
-echo ""
-cd "$SYNC_REPO"
-
-if git remote get-url origin &>/dev/null; then
-  ok "Remote already configured: $(git remote get-url origin)"
-  info "Pulling latest..."
-  git pull --rebase 2>/dev/null || git pull 2>/dev/null || true
-else
-  warn "No GitHub remote configured yet."
-  echo ""
-
+  # Connect to GitHub
   if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
-    echo -e "  ${BOLD}Create the remote repo now? (y/n)${NC}"
+    echo ""
+    echo -e "  ${BOLD}Create private GitHub repo for sync? (y/n)${NC}"
     read -r CREATE_REMOTE
     if [[ "$CREATE_REMOTE" == "y" || "$CREATE_REMOTE" == "Y" ]]; then
       info "Creating private repo on GitHub..."
-      cd "$SYNC_REPO"
       gh repo create dev-sync --private --source=. --push
       ok "Remote repo created and pushed!"
     fi
   else
-    echo "  To connect to GitHub, run:"
+    warn "No gh CLI or not authenticated."
+    echo "  Run later:"
+    echo "    cd ~/dev-sync && gh repo create dev-sync --private --source=. --push"
+  fi
+fi
+
+# ===================================================================
+# STEP 6: gentle-ai (Engram + SDD)
+# ===================================================================
+step "6/6 — Engram + SDD (via gentle-ai)"
+
+if command -v gentle-ai &>/dev/null; then
+  ok "gentle-ai already installed: $(gentle-ai version 2>/dev/null || echo 'unknown version')"
+  info "Syncing components..."
+  gentle-ai sync --component engram 2>/dev/null || true
+  gentle-ai sync --component sdd 2>/dev/null || true
+elif command -v engram &>/dev/null; then
+  ok "Engram already installed: $(engram version 2>/dev/null || echo 'unknown version')"
+  warn "gentle-ai not found — install it for SDD workflow"
+else
+  info "Installing gentle-ai (includes Engram + SDD + Skills)..."
+  echo ""
+
+  INSTALLED=false
+
+  # Try Homebrew first
+  if command -v brew &>/dev/null; then
+    info "Trying Homebrew..."
+    if brew tap Gentleman-Programming/homebrew-tap 2>/dev/null && \
+       brew install gentle-ai 2>/dev/null; then
+      INSTALLED=true
+      ok "gentle-ai installed via Homebrew"
+    else
+      warn "Homebrew install failed, trying curl..."
+    fi
+  fi
+
+  # Fallback to curl installer
+  if [[ "$INSTALLED" == "false" ]]; then
+    if curl -fsSL https://raw.githubusercontent.com/Gentleman-Programming/gentle-ai/main/scripts/install.sh -o /tmp/gentle-ai-install.sh 2>/dev/null; then
+      bash /tmp/gentle-ai-install.sh
+      rm -f /tmp/gentle-ai-install.sh
+      INSTALLED=true
+      ok "gentle-ai installed via script"
+    else
+      warn "Could not download gentle-ai installer"
+    fi
+  fi
+
+  if [[ "$INSTALLED" == "false" ]]; then
+    warn "gentle-ai could not be installed automatically."
     echo ""
-    echo "    cd ~/dev-sync"
-    echo "    gh repo create dev-sync --private --source=. --push"
-    echo ""
-    echo "  Or manually:"
-    echo ""
-    echo "    cd ~/dev-sync"
-    echo "    git remote add origin git@github.com:YOUR_USER/dev-sync.git"
-    echo "    git push -u origin main"
+    echo "  Install manually:"
+    echo "    brew tap Gentleman-Programming/homebrew-tap && brew install gentle-ai"
+    echo "  Or:"
+    echo "    curl -fsSL https://raw.githubusercontent.com/Gentleman-Programming/gentle-ai/main/scripts/install.sh | bash"
     echo ""
   fi
 fi
 
-# -------------------------------------------------------------------
-# Step 6: Add shell alias for restore
-# -------------------------------------------------------------------
+# Run gentle-ai setup for Claude Code if available
+if command -v gentle-ai &>/dev/null; then
+  echo ""
+  echo -e "  ${BOLD}Run gentle-ai setup for Claude Code? (y/n)${NC}"
+  echo -e "  ${DIM}(Configures Engram MCP, SDD workflow, Skills)${NC}"
+  read -r SETUP_GENTLE
+  if [[ "$SETUP_GENTLE" == "y" || "$SETUP_GENTLE" == "Y" ]]; then
+    info "Running gentle-ai installer for Claude Code..."
+    gentle-ai install --agent claude-code --preset full-gentleman 2>/dev/null || \
+    gentle-ai install --agent claude-code 2>/dev/null || \
+    gentle-ai 2>/dev/null || \
+    warn "gentle-ai setup needs manual run: gentle-ai"
+  fi
+fi
+
+# Also install engram standalone if gentle-ai didn't install it
+if ! command -v engram &>/dev/null; then
+  info "Installing Engram standalone..."
+  if command -v brew &>/dev/null; then
+    brew install gentleman-programming/tap/engram 2>/dev/null && \
+      ok "Engram installed via Homebrew" || \
+      warn "Engram brew install failed — install manually: brew install gentleman-programming/tap/engram"
+  else
+    warn "Install Engram manually: https://github.com/Gentleman-Programming/engram/releases"
+  fi
+fi
+
+# ===================================================================
+# Shell aliases
+# ===================================================================
 SHELL_RC=""
 if [[ -f "$HOME/.zshrc" ]]; then
   SHELL_RC="$HOME/.zshrc"
@@ -281,36 +388,52 @@ fi
 
 if [[ -n "$SHELL_RC" ]]; then
   if ! grep -q "dev-sync-restore" "$SHELL_RC" 2>/dev/null; then
-    echo "" >> "$SHELL_RC"
-    echo "# Dev-Sync: restore projects from sync repo" >> "$SHELL_RC"
-    echo "alias dev-sync-restore='bash \$HOME/.claude/scripts/dev-sync-restore.sh'" >> "$SHELL_RC"
-    echo "alias dev-sync-log='tail -20 /tmp/dev-sync.log'" >> "$SHELL_RC"
-    ok "Added shell aliases (dev-sync-restore, dev-sync-log)"
+    cat >> "$SHELL_RC" << 'ALIASES'
+
+# Dev-Sync aliases
+alias dev-sync-restore='bash $HOME/.claude/scripts/dev-sync-restore.sh'
+alias dev-sync-log='tail -20 /tmp/dev-sync.log'
+alias dev-sync-status='echo "Last sync:" && stat -f "%Sm" /tmp/dev-sync.log 2>/dev/null || echo "No syncs yet"'
+ALIASES
+    ok "Shell aliases added (dev-sync-restore, dev-sync-log, dev-sync-status)"
   fi
 fi
 
-# -------------------------------------------------------------------
-# Done!
-# -------------------------------------------------------------------
+# ===================================================================
+# DONE!
+# ===================================================================
 echo ""
-echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║         Installation Complete!       ║${NC}"
-echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
+echo -e "${BOLD}╔══════════════════════════════════════════════╗${NC}"
+echo -e "${BOLD}║          Installation Complete!              ║${NC}"
+echo -e "${BOLD}╚══════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  ${GREEN}Sync repo:${NC}     ~/dev-sync/"
-echo -e "  ${GREEN}Scripts:${NC}       ~/.claude/scripts/dev-sync*.sh"
-echo -e "  ${GREEN}Hooks:${NC}         ~/.claude/settings.json"
+echo -e "  ${GREEN}✓${NC} Dev-Sync     ~/dev-sync/ + Claude Code hooks"
+echo -e "  ${GREEN}✓${NC} Statusline   ~/.claude/statusline.sh (with sync indicator)"
+
+if command -v engram &>/dev/null; then
+  echo -e "  ${GREEN}✓${NC} Engram       AI memory persistence"
+else
+  echo -e "  ${YELLOW}○${NC} Engram       Not installed (install manually)"
+fi
+
+if command -v gentle-ai &>/dev/null; then
+  echo -e "  ${GREEN}✓${NC} gentle-ai    SDD + Skills configured"
+else
+  echo -e "  ${YELLOW}○${NC} gentle-ai    Not installed (install manually)"
+fi
+
 echo ""
 echo -e "  ${BOLD}How it works:${NC}"
-echo -e "  1. Work with Claude Code normally"
-echo -e "  2. Every edit auto-syncs to ~/dev-sync/ (silent)"
-echo -e "  3. On the other machine: open Claude Code → auto-pulls"
-echo -e "  4. YOUR commits/pushes go to your REAL project repo"
+echo -e "  1. Work with Claude Code → edits auto-sync to ~/dev-sync/"
+echo -e "  2. Switch PC → open Claude Code → auto-pulls latest"
+echo -e "  3. Engram remembers what Claude learned across sessions"
+echo -e "  4. YOUR commits/pushes → your REAL project repo"
+echo ""
+echo -e "  ${BOLD}Statusline shows:${NC}"
+echo -e "  Model | Dir | Git | Lines | Context | Cost | Tokens | ${CYAN}✓ sync 2m${NC}"
 echo ""
 echo -e "  ${BOLD}Commands:${NC}"
-echo -e "  dev-sync-restore <project>  Manually restore a project"
-echo -e "  dev-sync-log                View sync activity log"
-echo ""
-echo -e "  ${YELLOW}Tip:${NC} For AI memory sync, also install Engram:"
-echo -e "  https://github.com/Gentleman-Programming/engram"
+echo -e "  dev-sync-restore <project>   Restore project from sync"
+echo -e "  dev-sync-log                 View sync activity"
+echo -e "  dev-sync-status              Last sync time"
 echo ""
